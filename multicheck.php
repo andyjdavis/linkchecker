@@ -106,11 +106,11 @@ for(;;) {
     if($mcRes != CURLM_OK) break;
     while($done = curl_multi_info_read($multihandle)) {
         $handle = $done['handle'];
-        
+
         $sitecontent = curl_multi_getcontent($handle);
 
         $site = $sitesrunning[(string)$handle];
-        $site->originalurl = $site->url;
+        $site->previousurl = $site->url;
         $site->url = curl_getinfo($handle, CURLINFO_EFFECTIVE_URL);
         $info = curl_getinfo($handle);
         $curl_error = new stdClass;
@@ -135,10 +135,10 @@ for(;;) {
                 if ($outcome) {
                     $sitespassed++;
                 } else {
-                    // frontpages are heavily modified.. in addition, check one $timelongmoodleypgs page
+                    // Front pages are heavily modified. In addition, check one other page.
                     if (!preg_match('#'.$moodleypage.'#', $site->url)) {
                         $oldurl = $site->url;
-                        $outcome = reinsert_site_into_buffer($site, $site->url. $moodleypage);
+                        $outcome = reinsert_site_into_buffer($site, $site->url.$moodleypage);
                         if ($outcome===false) {
                             update_site($site, '', ((int)$site->unreachable+1), 'Max manual redirects exceeded (moodleypage)');
                             writeline($site->id, $oldurl,'', '', $site->manualredirect, '', 'Maximum manual redirects exceeded : '.$site->url. $moodleypage);
@@ -146,7 +146,19 @@ for(;;) {
                             writeline($site->id, $oldurl,'', '', $site->manualredirect, '', 'Extra page check redirect for '.$site->url);
                         }
                     } else {
-                        $sitesfailed++;
+                        // Last ditch attempt. Check for a distinctive Moodle image file.
+                        $url = @getimagesize($site->originalurl.'pix/s/martin.gif');
+
+                        if(is_array($url)) {
+                            // The image exists.
+                            $sitespassed++;
+
+                            writeline($site->id, $site->originalurl, 'P', '0', '', $site->manualredirect, '', 'Detected Moodle image');
+                        } else {
+                            // The image does not exist.
+                            // No additional work required as link_checker_test_result() updated the site record.
+                            $sitesfailed++;
+                        }
                     }
                 }
             }
@@ -263,6 +275,8 @@ function fill_site_buffer() {
 
     foreach ($sites as $site) {
         $site->manualredirect = 0;
+        $site->originalurl = $site->url; // The site's real first URL before any redirects. Do not modify.
+
         $sitebuffer[] = $site;
         //update timelinkchecked early (useful when running some multiple linkchecker processes to go thru bunch faster when testing fingerprinting)
         // Note this update_site() call also resets each sites's unreachable counter to 0.
@@ -315,7 +329,7 @@ function link_checker_test_result(&$site, $handle, $html) {
     $score = $htmlscore+$headscore;
 
     if ($score >= 5) {   // Success!
-      if (curl_getinfo($handle, CURLINFO_EFFECTIVE_URL) != $site->originalurl) {
+      if (curl_getinfo($handle, CURLINFO_EFFECTIVE_URL) != $site->previousurl) {
         $site->redirectto = curl_getinfo($handle, CURLINFO_EFFECTIVE_URL);
       }
       update_site($site, $score, 0, '', $moodlerelease, $serverstring, $fingerprint);
