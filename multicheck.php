@@ -71,7 +71,16 @@ for(;;) {
 
     while ($sitecurlsrunning<$maxsitecurls && count($sitebuffer)>0) {
         $site = array_shift($sitebuffer);
-        if (is_bogon($site->url)) {
+        $bogon_test = is_bogon($site->url);
+        if ($bogon_test == -1) {
+            // Had trouble retrieving DNS information.
+            // Skip the site but make sure the previous score and unreachable are preserved.
+            update_site($site, $site->score, ((int)$site->unreachable), addslashes("DNS error - Didnt attempt curl"));
+            writeline($site->id, $site->url, 'F', '-','0','0', "DNS error - Didnt attempt curl");
+            $siteserrored++;
+            continue;
+        }
+        if ($bogon_test) {
             update_site($site, -1, ((int)$site->unreachable+1), addslashes("Non-routable IP found - Didnt attempt curl"));
             writeline($site->id, $site->url, 'F', '-','0','0', "Non-routable IP found - Didnt attempt curl");
             $siteserrored++;

@@ -35,14 +35,14 @@ function check_for_manual_redirect($sitecontent) {
 /**
  * Is the supplied URL a bogon IP? Does it resolve to a bogon IP?
  * https://en.wikipedia.org/wiki/Bogon_filtering
- * @return True if the supplied url is a bogon.
+ * @return True if the supplied url is a bogon, false if bogon, -1 if there is a problem with dns.
  */
 function is_bogon($url) {
     $host = parse_url($url, PHP_URL_HOST);
-    $records = dns_get_record($host, DNS_A + DNS_AAAA);
+    $records = @dns_get_record($host, DNS_A + DNS_AAAA);
     if (empty($records)) {
         // No dns record but not a bogon.
-        return 0;
+        return -1;
     }
     $a_records=[];
     $aaaa_records=[];
